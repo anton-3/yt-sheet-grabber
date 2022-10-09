@@ -41,14 +41,15 @@ class SheetGrabber:
 
 def main():
     parser = ArgumentParser(description='download a transcription video from youtube, screenshot all the sheet music over the course of the video and output it to a single pdf')
-    parser.add_argument('link', type=str)
+    parser.add_argument('link', type=str, help='youtube link to download the video from')
+    parser.add_argument('--filename', type=str, metavar='filename', help='filename to save the downloaded video to (stem only), default is video title')
     args = parser.parse_args()
 
     grabber = SheetGrabber(args.link)
     if not grabber.verify_link():
         return
     print('downloading the video...')
-    grabber.download()
+    grabber.download(args.filename)
 
 if __name__ == '__main__':
     main()
