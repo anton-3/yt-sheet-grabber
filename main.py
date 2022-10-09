@@ -20,22 +20,23 @@ class SheetGrabber:
             # pytube throws a RegexMatchError if this isn't a valid youtube link
             video = YouTube(self.link)
             # pytube throws a VideoUnavailable error on yt.title call if it can't find the video
-            print(f'Found "{video.title}"')
+            print(f'Found "{video.title}" on youtube')
         except pytube.exceptions.RegexMatchError:
-            print('error: not a valid youtube link')
+            print('ERROR: not a valid youtube link')
         except pytube.exceptions.VideoUnavailable:
-            print('error: video unavailable')
+            print('ERROR: video unavailable')
         else:
             valid = True
             self.video = video
         return valid
 
-    def download(self):
+    # download the video at self.link, saving it to filename
+    def download(self, filename = None):
+        # default filename is the video title
+        self.filename = filename if filename else self.video.title
         # download the video into current directory, filtering for video only (no audio)
-        self.video.streams.filter(only_video=True, file_extension='mp4', adaptive=True).first().download()
-        print('Done downloading')
-        # pytube gives the downloaded video this filename by default
-        filename = f'{self.video.title}.mp4'
+        self.video.streams.filter(only_video=True, file_extension='mp4', adaptive=True).first().download(filename=self.filename + '.mp4')
+        print(f'Done downloading, saved to {self.filename}.mp4')
 
 
 def main():
@@ -47,7 +48,7 @@ def main():
     if not grabber.verify_link():
         return
     print('downloading the video...')
-    # do download stuff here
+    grabber.download()
 
 if __name__ == '__main__':
     main()
