@@ -9,27 +9,24 @@ class SheetGrabber:
     def __init__(self, link):
         self.link = link
 
-    # check if self.link is valid and downloadable
-    # (mostly by catching errors from pytube)
-    # example valid: https://www.youtube.com/watch?v=x-3XxK6N0kM
-    # example invalid: asdf
-    # example invalid: https://www.youtube.com/watch?v=aioghaidjaghsdofj
-    def verify_link(self):
-        valid = False
+        # this is a dumb way to check if the link is valid but I couldn't think of a better one
+        # initially set that the link is invalid, if it gets through try/except, set it to True
+        self.valid_link = False
         try:
             # get the video by the link
             # pytube throws a RegexMatchError if this isn't a valid youtube link
-            video = YouTube(self.link)
-            # pytube throws a VideoUnavailable error on yt.title call if it can't find the video
-            print(f'Found "{video.title}" on youtube')
+            self.video = YouTube(self.link)
+            # this throws one of several errors if the video is unavailable
+            # https://pytube.io/en/latest/_modules/pytube/__main__.html#YouTube.check_availability
+            self.video.check_availability()
         except pytube.exceptions.RegexMatchError:
             print('ERROR: not a valid youtube link')
-        except pytube.exceptions.VideoUnavailable:
-            print('ERROR: video unavailable')
+        except Exception as e:
+            print(f'ERROR: video unavailable')
+            # print(f'ERROR: video unavailable, error was {e.__class__.__name__}')
         else:
-            valid = True
-            self.video = video
-        return valid
+            self.valid_link = True
+            print(f'Found "{self.video.title}"')
 
     # download the video at self.link, saving it to filename
     # by default, filename is set to the video's title
@@ -56,7 +53,7 @@ def main():
     args = parser.parse_args()
 
     grabber = SheetGrabber(args.link)
-    if not grabber.verify_link():
+    if not grabber.valid_link:
         return
     grabber.download(args.filename, args.skip_download)
 
