@@ -124,6 +124,8 @@ def main():
     parser.add_argument('link', type=str, help='youtube link to download the video from')
     parser.add_argument('--filename', type=str, metavar='filename', help='filename to save the downloaded video to (stem only), default is video title')
     parser.add_argument('--skip-download', action='store_true', help='skip downloading the video and look for it in the current directory')
+    parser.add_argument('--preserve-video', action='store_true', help='don\'t delete the downloaded video file (audio only) afterward')
+    parser.add_argument('--preserve-imgs', action='store_true', help='don\'t delete the extracted image files afterward')
     args = parser.parse_args()
 
     # create SheetGrabber object, verify the video link is valid
@@ -143,7 +145,7 @@ def main():
     grabber.extract_frames()
 
     # clean up: delete video and images
-    grabber.cleanup()
+    grabber.cleanup(args.preserve_video, args.preserve_imgs)
 
 if __name__ == '__main__':
     main()
