@@ -3,8 +3,10 @@
 import pytube
 from pytube import YouTube
 from argparse import ArgumentParser
+import cv2
 import os
 import errno
+import math
 
 class SheetGrabber:
     # link: the link to the youtube video to grab sheet music from
@@ -45,6 +47,7 @@ class SheetGrabber:
         print(f'Done downloading, saved to {filepath}')
         self.filename = filename
         self.filepath = filepath
+        # self.filepath is just self.filename but includes the file extension
 
     # skip downloading the video, just use a video file instead
     # this mainly exists to set self.filename and verify the video file exists
@@ -67,23 +70,67 @@ class SheetGrabber:
         filename = os.path.splitext(filepath)[0]
         return filename
 
+    # extract frames from the downloaded video and save them as images
+    # interval: the time in ms between each frame to save, default 3 seconds
+    def extract_frames(self, interval_ms = 3000):
+        print('Extracting frames from the video file...')
+        # get VideoCapture object for downloaded video
+        capture = cv2.VideoCapture(self.filepath)
+        # get the video's total frame count and frames per second
+        frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
+        fps = round(capture.get(cv2.CAP_PROP_FPS))
+        # make a directory to store the images, same name as video without extension
+        if not os.path.isdir(self.filename):
+            os.mkdir(self.filename)
+
+        interval_seconds = interval_ms / 1000
+        # number of frames in a second times interval in seconds is interval in frames
+        interval_frames = round(fps * interval_seconds) # must be an integer
+        # total number of images that'll be saved
+        total_images = math.ceil(frame_count / interval_frames)
+        # running count for number of images saved
+        image_count = 0
+
+        # step through frames in increments of interval_frames
+        for frame in range(0, frame_count, interval_frames):
+            # set cv2 to point to this frame to decode
+            capture.set(cv2.CAP_PROP_POS_FRAMES, frame)
+            success, image = capture.read()
+            # if success is False, there was no frame to read for some reason
+            if not success:
+                print('Ran out of frames to read, which shouldn\'t have happened')
+                break
+
+            image_filepath = f'{self.filename}/{frame}.jpg'
+            # write the image to image_filepath
+            cv2.imwrite(image_filepath, image)
+            image_count += 1
+            print(f'{round(image_count / total_images * 10000) / 100}%', end='\r')
+        print('\nFrames extracted')
+
 
 def main():
-    parser = ArgumentParser(description='download a transcription video from youtube, screenshot all the sheet music over the course of the video and output it to a single pdf')
+    parser = ArgumentParser(description='download a transcription video from youtube, screenshot all the sheet music over the course of the video and output it to a single file')
     parser.add_argument('link', type=str, help='youtube link to download the video from')
     parser.add_argument('--filename', type=str, metavar='filename', help='filename to save the downloaded video to (stem only), default is video title')
     parser.add_argument('--skip-download', action='store_true', help='skip downloading the video and look for it in the current directory')
     args = parser.parse_args()
 
+    # create SheetGrabber object, verify the video link is valid
     grabber = SheetGrabber(args.link)
     if not grabber.valid_link:
         return
 
+    # download the video, save it to a file
+    # or just verify the video file exists if --skip-download is specified
     filename = args.filename if args.filename else grabber.find_filename()
     if args.skip_download:
         grabber.skip_download(filename)
     else:
         grabber.download(filename)
+
+    # extract frames from the video, save them to image files
+    grabber.extract_frames()
 
 if __name__ == '__main__':
     main()
