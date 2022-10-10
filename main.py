@@ -37,7 +37,7 @@ class SheetGrabber:
 
     # download the video at self.link, saving it to filename
     def download(self, filename):
-        print('Downloading the video off youtube... (might take a sec)')
+        print('Downloading the video off youtube...')
         # search for a video stream to download, filtering for video only (no audio)
         stream = self.video.streams.filter(only_video=True, file_extension=self.extension, adaptive=True).first()
         # TODO: if filepath exists, don't download, instead throw an error recommending --skip-download
@@ -45,7 +45,7 @@ class SheetGrabber:
         # download the video
         # TODO: some kind of progress bar/output, this takes a while and prints nothing
         stream.download(filename=filepath)
-        print(f'Done downloading, saved to {filepath}')
+        print(f'Done downloading, saved to "{filepath}"')
         self.filename = filename
         self.filepath = filepath
         # self.filepath is just self.filename but includes the file extension
@@ -73,8 +73,9 @@ class SheetGrabber:
 
     # extract frames from the downloaded video and save them as images
     # interval: the time in ms between each frame to save, default 3 seconds
+    # TODO: error when interval is negative or too big (aka bigger than the video)
     def extract_frames(self, interval_ms = 3000):
-        print('Extracting frames from the video file...')
+        print(f'Extracting screenshots from the video with interval {interval_ms / 1000} seconds...')
         # get VideoCapture object for downloaded video
         capture = cv2.VideoCapture(self.filepath)
         # get the video's total frame count and frames per second
@@ -107,15 +108,15 @@ class SheetGrabber:
             cv2.imwrite(image_filepath, image)
             image_count += 1
             print(f'{round(image_count / total_images * 10000) / 100}%', end='\r')
-        print('\nFrames extracted')
+        print(f'\nScreenshots extracted and saved to directory "{self.filename}"')
 
     # clean up the working directory afterward: delete the video and the extracted images
     def cleanup(self, preserve_video = False, preserve_imgs = False):
         if not preserve_video:
-            print(f'Cleanup: deleting file {self.filepath}')
+            print(f'Cleanup: deleting file "{self.filepath}"')
             os.remove(self.filepath)
         if not preserve_imgs:
-            print(f'Cleanup: deleting directory {self.filename}')
+            print(f'Cleanup: deleting directory "{self.filename}"')
             shutil.rmtree(self.filename)
 
 
@@ -123,6 +124,11 @@ def main():
     parser = ArgumentParser(description='download a transcription video from youtube, screenshot all the sheet music over the course of the video and output it to a single file')
     parser.add_argument('link', type=str, help='youtube link to download the video from')
     parser.add_argument('--filename', type=str, metavar='filename', help='filename to save the downloaded video to (stem only), default is video title')
+    # TODO: test this lambda thing
+    #parser.add_argument('--crop', type=lambda s: [int(n) for n in s.split('-')], metavar='XX-XX', help='section to vertically crop the screenshots to in order to only capture the sheet music')
+    parser.add_argument('--interval', type=int, metavar='ms', default=3000, help='interval in ms between screenshots to grab from the video, default is 3000, larger interval is faster but might skip over some stuff')
+    #parser.add_argument('--trim', type=str, metavar='X:XX-X:XX', help='specify start and end timestamps to trim the video to, useful to trim out intros/outros')
+    #parser.add_argument('--output', type=str, metavar='filetype', choices=['pdf', 'jpg'], help='filetype to output the sheet music as, choose from either pdf or jpg')
     parser.add_argument('--skip-download', action='store_true', help='skip downloading the video and look for it in the current directory')
     parser.add_argument('--preserve-video', action='store_true', help='don\'t delete the downloaded video file (audio only) afterward')
     parser.add_argument('--preserve-imgs', action='store_true', help='don\'t delete the extracted image files afterward')
@@ -142,9 +148,9 @@ def main():
         grabber.download(filename)
 
     # extract frames from the video, save them to image files
-    grabber.extract_frames()
+    grabber.extract_frames(args.interval)
 
-    # clean up: delete video and images
+    # cleanup: delete video and images, unless otherwise specified in the options
     grabber.cleanup(args.preserve_video, args.preserve_imgs)
 
 if __name__ == '__main__':
