@@ -5,6 +5,7 @@ from pytube import YouTube
 from argparse import ArgumentParser
 import cv2
 import os
+import shutil
 import errno
 import math
 
@@ -108,6 +109,15 @@ class SheetGrabber:
             print(f'{round(image_count / total_images * 10000) / 100}%', end='\r')
         print('\nFrames extracted')
 
+    # clean up the working directory afterward: delete the video and the extracted images
+    def cleanup(self, preserve_video = False, preserve_imgs = False):
+        if not preserve_video:
+            print(f'Cleanup: deleting file {self.filepath}')
+            os.remove(self.filepath)
+        if not preserve_imgs:
+            print(f'Cleanup: deleting directory {self.filename}')
+            shutil.rmtree(self.filename)
+
 
 def main():
     parser = ArgumentParser(description='download a transcription video from youtube, screenshot all the sheet music over the course of the video and output it to a single file')
@@ -131,6 +141,9 @@ def main():
 
     # extract frames from the video, save them to image files
     grabber.extract_frames()
+
+    # clean up: delete video and images
+    grabber.cleanup()
 
 if __name__ == '__main__':
     main()
