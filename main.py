@@ -4,10 +4,12 @@ import pytube
 from pytube import YouTube
 from argparse import ArgumentParser
 import cv2
+import numpy as np
 import os
 import shutil
 import errno
 import math
+from glob import glob
 
 class SheetGrabber:
     # link: the link to the youtube video to grab sheet music from
@@ -110,6 +112,62 @@ class SheetGrabber:
             print(f'{round(image_count / total_images * 10000) / 100}%', end='\r')
         print(f'\nScreenshots extracted and saved to directory "{self.filename}"')
 
+    # crop an image vertically with cv2, overwriting existing image at filepath
+    # image is an image object read with cv2
+    # top and bottom pixel are the top and bottom pixel rows to crop down to
+    # top of an image is 0 and the bottom (assuming 1920x1080) is 1080
+    def crop_image(self, image_path, top_pixel, bottom_pixel):
+        image = cv2.imread(image_path)
+        cropped_image = image[top_pixel:bottom_pixel]
+        cv2.imwrite(image_path, cropped_image)
+
+    # attempts to automatically find the bounds to crop each image to sheet music only
+    # does this by using cv2 to find the first row of pixels that's 100% white, then
+    # find the last row of pixels that's 100% white
+    # returns two values, the indices of those two rows respectively
+    def guess_crop_bounds(self, image_path = None):
+        if not image_path:
+            image_path = glob(f'{self.filename}/*.jpg')[0]
+        image = cv2.imread(image_path)
+        top_bound = self.first_white_row(image)
+        # if top_bound is None, just exit bc couldn't guess the bounds
+        if not top_bound:
+            return None, None
+        # for bottom bound, do same as top except with image flipped vertically
+        bottom_bound = len(image) - self.first_white_row(image[::-1])
+        return top_bound, bottom_bound
+
+    # returns index of first row in a cv2 image that's 100% white pixels
+    def first_white_row(self, image):
+        white_row_idx = None
+        # what a white pixel looks like to cv2
+        white = np.array([255, 255, 255], dtype='uint8')
+        for row_idx, row in enumerate(image):
+            has_nonwhite = False
+            # throw out first and last 10 pixels bc shading sometimes exists
+            for pixel in row[10:-10]:
+                # if the pixel is not white, skip the row
+                if not np.array_equal(pixel, white):
+                    has_nonwhite = True
+                    break # break out of inner loop
+            # now if has_nonwhite is True, row is NOT 100% white
+            if has_nonwhite:
+                continue # go to next row
+            white_row_idx = row_idx
+            break
+        return white_row_idx
+
+    # crop all extracted frames down to just the sheet music
+    # given the top and bottom bounds to crop the images to
+    def crop_frames(self, top, bottom):
+        print(f'Cropping screenshots to {top}px-{bottom}px...')
+        # list of all images to crop
+        image_files = glob(f'{self.filename}/*.jpg')
+        for idx, image_file in enumerate(image_files):
+            print(f'{round((idx+1) / len(image_files) * 10000) / 100}%', end='\r')
+            self.crop_image(image_file, top, bottom)
+        print()
+
     # clean up the working directory afterward: delete the video and the extracted images
     def cleanup(self, preserve_video = False, preserve_imgs = False):
         if not preserve_video:
@@ -124,8 +182,8 @@ def main():
     parser = ArgumentParser(description='download a transcription video from youtube, screenshot all the sheet music over the course of the video and output it to a single file')
     parser.add_argument('link', type=str, help='youtube link to download the video from')
     parser.add_argument('--filename', type=str, metavar='filename', help='filename to save the downloaded video to (stem only), default is video title')
-    # TODO: test this lambda thing
-    #parser.add_argument('--crop', type=lambda s: [int(n) for n in s.split('-')], metavar='XX-XX', help='section to vertically crop the screenshots to in order to only capture the sheet music')
+    # the type here is set to a lambda to split input by '-' and parse each into a int
+    #parser.add_argument('--crop', type=lambda s: [int(n) for n in s.split('-')], metavar='[px]-[px]', help='pixel range to vertically crop the screenshots to in order to only capture the sheet music')
     parser.add_argument('--interval', type=int, metavar='ms', default=3000, help='interval in ms between screenshots to grab from the video, default is 3000, larger interval is faster but might skip over some stuff')
     #parser.add_argument('--trim', type=str, metavar='X:XX-X:XX', help='specify start and end timestamps to trim the video to, useful to trim out intros/outros')
     #parser.add_argument('--output', type=str, metavar='filetype', choices=['pdf', 'jpg'], help='filetype to output the sheet music as, choose from either pdf or jpg')
@@ -150,8 +208,16 @@ def main():
     # extract frames from the video, save them to image files
     grabber.extract_frames(args.interval)
 
+    # crop images
+    # attempt to guess the range to crop to in order to just get the sheet music
+    top_crop, bottom_crop = grabber.guess_crop_bounds(f'{filename}/0.jpg')
+    # if and only if it's successful (for now), crop them
+    if top_crop:
+        grabber.crop_frames(top_crop, bottom_crop)
+
     # cleanup: delete video and images, unless otherwise specified in the options
-    grabber.cleanup(args.preserve_video, args.preserve_imgs)
+    # assume --skip-download implies --preserve-video
+    grabber.cleanup(args.preserve_video or args.skip_download, args.preserve_imgs)
 
 if __name__ == '__main__':
     main()
