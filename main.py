@@ -39,7 +39,7 @@ class SheetGrabber:
 
     # download the video at self.link, saving it to filename
     def download(self, filename):
-        print('Downloading the video off youtube...')
+        print('Downloading the video off youtube (video only, no audio)...')
         # search for a video stream to download, filtering for video only (no audio)
         stream = self.video.streams.filter(only_video=True, file_extension=self.extension, adaptive=True).first()
         # TODO: if filepath exists, don't download, instead throw an error recommending --skip-download
@@ -138,6 +138,7 @@ class SheetGrabber:
         return top_bound, bottom_bound
 
     # returns index of first row in a cv2 image that's 100% white pixels
+    # TODO: rework this to work when it's "close enough" to 100% white
     def first_white_row(self, image):
         white_row_idx = None
         # what a white pixel looks like to cv2
@@ -160,9 +161,15 @@ class SheetGrabber:
     # crop all extracted frames down to just the sheet music
     # given the top and bottom bounds to crop the images to
     def crop_frames(self, top, bottom):
-        print(f'Cropping screenshots to {top}px-{bottom}px...')
+        if top < 0 or bottom < 0 or bottom <= top:
+            raise ValueError('Invalid input for cropping range')
         # list of all images to crop
         image_files = glob(f'{self.filename}/*.jpg')
+        # if top or bottom are greater than the height of the images, limit them
+        height = len(cv2.imread(image_files[0]))
+        top = height - 1 if top >= height else top
+        bottom = height if bottom > height else bottom
+        print(f'Cropping screenshots to {top}px-{bottom}px...')
         for idx, image_file in enumerate(image_files):
             print(f'{round((idx+1) / len(image_files) * 10000) / 100}%', end='\r')
             self.crop_image(image_file, top, bottom)
@@ -183,12 +190,12 @@ def main():
     parser.add_argument('link', type=str, help='youtube link to download the video from')
     parser.add_argument('--filename', type=str, metavar='filename', help='filename to save the downloaded video to (stem only), default is video title')
     # the type here is set to a lambda to split input by '-' and parse each into a int
-    #parser.add_argument('--crop', type=lambda s: [int(n) for n in s.split('-')], metavar='[px]-[px]', help='pixel range to vertically crop the screenshots to in order to only capture the sheet music')
+    parser.add_argument('--crop', type=lambda s: [int(n) for n in s.split('-')[:2]], metavar='[px]-[px]', help='pixel range to vertically crop the screenshots to in order to only capture the sheet music, by default the program tries to process the images and guess the range')
     parser.add_argument('--interval', type=int, metavar='ms', default=3000, help='interval in ms between screenshots to grab from the video, default is 3000, larger interval is faster but might skip over some stuff')
     #parser.add_argument('--trim', type=str, metavar='X:XX-X:XX', help='specify start and end timestamps to trim the video to, useful to trim out intros/outros')
     #parser.add_argument('--output', type=str, metavar='filetype', choices=['pdf', 'jpg'], help='filetype to output the sheet music as, choose from either pdf or jpg')
-    parser.add_argument('--skip-download', action='store_true', help='skip downloading the video and look for it in the current directory')
-    parser.add_argument('--preserve-video', action='store_true', help='don\'t delete the downloaded video file (audio only) afterward')
+    parser.add_argument('--skip-download', action='store_true', help='skip downloading the video and look for it in the current directory (implies --preserve-video)')
+    parser.add_argument('--preserve-video', action='store_true', help='don\'t delete the downloaded video file afterward')
     parser.add_argument('--preserve-imgs', action='store_true', help='don\'t delete the extracted image files afterward')
     args = parser.parse_args()
 
@@ -209,9 +216,12 @@ def main():
     grabber.extract_frames(args.interval)
 
     # crop images
-    # attempt to guess the range to crop to in order to just get the sheet music
-    top_crop, bottom_crop = grabber.guess_crop_bounds(f'{filename}/0.jpg')
-    # if and only if it's successful (for now), crop them
+    if args.crop:
+        top_crop = args.crop[0]
+        bottom_crop = args.crop[1]
+    else:
+        # attempt to guess the range to crop to in order to just get the sheet music
+        top_crop, bottom_crop = grabber.guess_crop_bounds()
     if top_crop:
         grabber.crop_frames(top_crop, bottom_crop)
 
