@@ -10,6 +10,8 @@ import shutil
 import errno
 import math
 from glob import glob
+from PIL import Image
+import imagehash
 
 class SheetGrabber:
     # link: the link to the youtube video to grab sheet music from
@@ -158,13 +160,20 @@ class SheetGrabber:
             break
         return white_row_idx
 
+    # returns a sorted list of the .jpg filenames in the extracted frames directory
+    def get_image_filenames(self):
+        image_files = glob(f'{self.filename}/*.jpg')
+        # sort filenames in the chronological order of the frames
+        image_files.sort(key=lambda f: int(os.path.splitext(os.path.basename(f))[0]))
+        return image_files
+
     # crop all extracted frames down to just the sheet music
     # given the top and bottom bounds to crop the images to
     def crop_frames(self, top, bottom):
         if top < 0 or bottom < 0 or bottom <= top:
             raise ValueError('Invalid input for cropping range')
         # list of all images to crop
-        image_files = glob(f'{self.filename}/*.jpg')
+        image_files = self.get_image_filenames()
         # if top or bottom are greater than the height of the images, limit them
         height = len(cv2.imread(image_files[0]))
         top = height - 1 if top >= height else top
@@ -174,6 +183,30 @@ class SheetGrabber:
             print(f'{round((idx+1) / len(image_files) * 10000) / 100}%', end='\r')
             self.crop_image(image_file, top, bottom)
         print()
+
+    # removes the duplicate sheet music frames from the images directory
+    # by comparing the images with the imagehash library, and deleting
+    # the ones that are similar
+    def remove_dupe_frames(self):
+        print('Filtering cropped image files...')
+        image_files = self.get_image_filenames()
+        imagehashes = {}
+        # calculate the perceptual hash of each image
+        for filename in image_files:
+            imagehashes[filename] = imagehash.phash(Image.open(filename))
+        # filenames to remove (because they're duplicates)
+        rm_filenames = []
+        # if difference between two hashes is < threshold, they're similar, so remove one
+        threshold = 5
+        # leave out the last filename, because we're comparing each to the next
+        for idx, filename in enumerate(image_files[:-1]):
+            next_filename = image_files[idx+1]
+            # if the images are similar
+            if imagehashes[filename] - imagehashes[next_filename] < threshold:
+                rm_filenames.append(next_filename)
+        #print(f'Removing {", ".join([os.path.basename(f) for f in rm_filenames])}')
+        for filename in rm_filenames:
+            os.remove(filename)
 
     # clean up the working directory afterward: delete the video and the extracted images
     def cleanup(self, preserve_video = False, preserve_imgs = False):
@@ -224,6 +257,9 @@ def main():
         top_crop, bottom_crop = grabber.guess_crop_bounds()
     if top_crop:
         grabber.crop_frames(top_crop, bottom_crop)
+    
+    # after cropping, remove all but one image of each row of sheet music
+    grabber.remove_dupe_frames()
 
     # cleanup: delete video and images, unless otherwise specified in the options
     # assume --skip-download implies --preserve-video
