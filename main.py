@@ -123,6 +123,7 @@ class SheetGrabber:
         cropped_image = image[top_pixel:bottom_pixel]
         cv2.imwrite(image_path, cropped_image)
 
+    # TODO: this implementation with cv2 is slow, inefficient, and inconsistent
     # attempts to automatically find the bounds to crop each image to sheet music only
     # does this by using cv2 to find the first row of pixels that's 100% white, then
     # find the last row of pixels that's 100% white
@@ -208,6 +209,24 @@ class SheetGrabber:
         for filename in rm_filenames:
             os.remove(filename)
 
+    # stitch all the sheet music images together vertically into one (very long) image
+    # TODO: def output_result_pdf
+    def output_result_image(self):
+        image_files = self.get_image_filenames()
+        images = [Image.open(filename) for filename in image_files]
+        result_width, _ = images[0].size
+        # sum of all the heights of each individual image
+        result_height = sum([img.size[1] for img in images])
+        result = Image.new('RGB', (result_width, result_height))
+        for idx, image in enumerate(images):
+            # the height to place the image at in the result
+            # sum of the heights of the previous images
+            start_height = sum([img.size[1] for img in images[:idx]])
+            result.paste(im=image, box=(0, start_height))
+        result_filename = f'{self.filename}.jpg'
+        print(f'Saving output image to {result_filename}...')
+        result.save(result_filename)
+
     # clean up the working directory afterward: delete the video and the extracted images
     def cleanup(self, preserve_video = False, preserve_imgs = False):
         if not preserve_video:
@@ -260,6 +279,9 @@ def main():
     
     # after cropping, remove all but one image of each row of sheet music
     grabber.remove_dupe_frames()
+
+    # export all the remaining sheet music images into one output image
+    grabber.output_result_image()
 
     # cleanup: delete video and images, unless otherwise specified in the options
     # assume --skip-download implies --preserve-video
