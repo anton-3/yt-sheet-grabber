@@ -278,7 +278,7 @@ def main():
     parser.add_argument('--crop', type=lambda s: [int(n) for n in s.split('-')[:2]], metavar='[px]-[px]', help='pixel range to vertically crop the screenshots to in order to only capture the sheet music, by default the program tries to process the images and guess the range')
     parser.add_argument('--interval', type=int, metavar='ms', default=3000, help='interval in ms between screenshots to grab from the video, default is 3000, larger interval is faster but might skip over some stuff')
     #parser.add_argument('--trim', type=str, metavar='X:XX-X:XX', help='specify start and end timestamps to trim the video to, useful to trim out intros/outros')
-    #parser.add_argument('--output', type=str, metavar='filetype', choices=['pdf', 'jpg'], help='filetype to output the sheet music as, choose from either pdf or jpg')
+    parser.add_argument('--output', type=str, metavar='filetype', default='pdf', choices=['pdf', 'jpg', 'both'], help='filetype to output the sheet music as, choose from either pdf (default), jpg, or both')
     parser.add_argument('--skip-download', action='store_true', help='skip downloading the video and look for it in the current directory (implies --preserve-video)')
     parser.add_argument('--preserve-video', action='store_true', help='don\'t delete the downloaded video file afterward')
     parser.add_argument('--preserve-imgs', action='store_true', help='don\'t delete the extracted image files afterward')
@@ -313,8 +313,11 @@ def main():
     # after cropping, remove all but one image of each row of sheet music
     grabber.remove_dupe_frames()
 
-    # export all the remaining sheet music images into one output pdf
-    grabber.output_result_pdf()
+    # export all the remaining sheet music images into a pdf (or jpg, specified by --output)
+    if args.output in ['pdf', 'both']:
+        grabber.output_result_pdf()
+    if args.output in ['jpg', 'both']:
+        grabber.output_result_image()
 
     # cleanup: delete video and images, unless otherwise specified in the options
     # assume --skip-download implies --preserve-video
