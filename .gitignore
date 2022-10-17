@@ -128,5 +128,7 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# ignore video files created during testing
+# ignore files created during testing
 *.mp4
+*.pdf
+*.jpg
