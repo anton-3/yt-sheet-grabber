@@ -13,6 +13,7 @@ from glob import glob
 from PIL import Image
 import imagehash
 import fitz
+from moviepy.video.io.ffmpeg_tools import ffmpeg_extract_subclip
 
 class SheetGrabber:
     # link: the link to the youtube video to grab sheet music from
@@ -66,6 +67,22 @@ class SheetGrabber:
         self.filename = filename
         self.filepath = filepath
 
+    # trims the downloaded video down to between the timestamps start and end
+    # timestamps are strings "XX:XX" or "X:XX", e.g. "0:15", "13:37"
+    def trim_video(self, start, end):
+        for timestamp in [start, end]:
+            if timestamp.count(':') != 1 or not ''.join(timestamp.split(':')).isdigit():
+                raise ValueError('Invalid timestamp given')
+        start_sec = int(start.split(':')[0]) * 60 + int(start.split(':')[1])
+        end_sec = int(end.split(':')[0]) * 60 + int(end.split(':')[1])
+        video_filename = f'{self.filename}.{self.extension}'
+        old_filename = f'{self.filename}-OLD.{self.extension}'
+        print(f'Trimming {video_filename} to {start_sec}s-{end_sec}s...')
+        # ffmpeg can't edit files in-place, so have to rename the original and delete it after
+        os.rename(video_filename, old_filename)
+        ffmpeg_extract_subclip(old_filename, start_sec, end_sec, targetname=video_filename)
+        os.remove(old_filename)
+
     # finds the default OS-compatible filename provided by pytube for the downloaded video
     # useful for when the user doesn't specify filename and you need to find one to use
     # returns just the stem of the filename, doesn't include file extension
@@ -105,7 +122,7 @@ class SheetGrabber:
             success, image = capture.read()
             # if success is False, there was no frame to read for some reason
             if not success:
-                print('Ran out of frames to read, which shouldn\'t have happened')
+                print('\nRan out of frames to read, which might happen when the video is trimmed', end='')
                 break
 
             image_filepath = f'{self.filename}/{frame}.jpg'
@@ -251,6 +268,20 @@ class SheetGrabber:
             page_images.append(current_page)
         return page_images
 
+    # takes a filename of a pdf and resize its pages to the normal size for A4 paper
+    # since by default with a 1920x1080 video, pdf is 1920 pixels wide which is massive
+    def convert_pdf_to_a4(self, filename):
+        input_pdf = fitz.open(filename)
+        result_pdf = fitz.open()
+        for page in input_pdf:
+            dimensions = fitz.paper_rect('a4')
+            new_page = result_pdf.new_page(width=dimensions.width, height=dimensions.height)
+            new_page.show_pdf_page(new_page.rect, input_pdf, page.number)
+        input_pdf.close()
+        result_pdf.save(filename)
+        result_pdf.close()
+
+    # stitch all the sheet music images together vertically into a pdf
     def output_result_pdf(self):
         # pages[0].save('result.pdf', 'PDF', resolution=300, save_all=True, append_images=pages[1:])
         image_files = self.get_image_filenames()
@@ -259,6 +290,7 @@ class SheetGrabber:
         result_filename = f'{self.filename}.pdf'
         print(f'Saving output pdf to {result_filename}...')
         page_images[0].save(result_filename, 'PDF', resolution=100, save_all=True, append_images=page_images[1:])
+        self.convert_pdf_to_a4(result_filename)
 
     # clean up the working directory afterward: delete the video and the extracted images
     def cleanup(self, preserve_video = False, preserve_imgs = False):
@@ -277,7 +309,7 @@ def main():
     # the type here is set to a lambda to split input by '-' and parse each into a int
     parser.add_argument('--crop', type=lambda s: [int(n) for n in s.split('-')[:2]], metavar='[px]-[px]', help='pixel range to vertically crop the screenshots to in order to only capture the sheet music, by default the program tries to process the images and guess the range')
     parser.add_argument('--interval', type=int, metavar='ms', default=3000, help='interval in ms between screenshots to grab from the video, default is 3000, larger interval is faster but might skip over some stuff')
-    #parser.add_argument('--trim', type=str, metavar='X:XX-X:XX', help='specify start and end timestamps to trim the video to, useful to trim out intros/outros')
+    parser.add_argument('--trim', type=lambda s: [t for t in s.split('-')[:2]], metavar='X:XX-X:XX', help='specify start and end timestamps to trim the video to, useful to trim out intros/outros')
     parser.add_argument('--output', type=str, metavar='filetype', default='pdf', choices=['pdf', 'jpg', 'both'], help='filetype to output the sheet music as, choose from either pdf (default), jpg, or both')
     parser.add_argument('--skip-download', action='store_true', help='skip downloading the video and look for it in the current directory (implies --preserve-video)')
     parser.add_argument('--preserve-video', action='store_true', help='don\'t delete the downloaded video file afterward')
@@ -296,6 +328,10 @@ def main():
         grabber.skip_download(filename)
     else:
         grabber.download(filename)
+
+    # trim the video before working on it if --trim is specified
+    if args.trim:
+        grabber.trim_video(args.trim[0], args.trim[1])
 
     # extract frames from the video, save them to image files
     grabber.extract_frames(args.interval)
