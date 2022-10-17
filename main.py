@@ -12,6 +12,7 @@ import math
 from glob import glob
 from PIL import Image
 import imagehash
+import fitz
 
 class SheetGrabber:
     # link: the link to the youtube video to grab sheet music from
@@ -210,7 +211,6 @@ class SheetGrabber:
             os.remove(filename)
 
     # stitch all the sheet music images together vertically into one (very long) image
-    # TODO: def output_result_pdf
     def output_result_image(self):
         image_files = self.get_image_filenames()
         images = [Image.open(filename) for filename in image_files]
@@ -226,6 +226,39 @@ class SheetGrabber:
         result_filename = f'{self.filename}.jpg'
         print(f'Saving output image to {result_filename}...')
         result.save(result_filename)
+
+    # takes a list of PIL images and returns a shorter list of them stitched together vertically
+    # stitches them together until they're close to but less than the dimensions of A4 paper
+    def images_to_pages(self, images):
+        page_ratio = 842 / 595 # ratio of height to width of A4 paper (roughly sqrt of 2)
+        width = images[0].width
+        # height to make each page in pixels, relative to image width
+        page_height = int(page_ratio * width)
+        page_images = []
+        for idx, image in enumerate(images):
+            if idx == 0 or current_page in page_images:
+                # if it's the first iteration OR we've already added this page to page_images,
+                # then reset the variables for the current page
+                current_page = Image.new('RGB', (width, page_height), color='white')
+                current_page_height = 0
+            if current_page_height + image.height > page_height:
+                page_images.append(current_page)
+            else:
+                current_page.paste(im=image, box=(0, current_page_height))
+                current_page_height += image.height
+        # add the last page, if it wasn't already added
+        if current_page not in page_images:
+            page_images.append(current_page)
+        return page_images
+
+    def output_result_pdf(self):
+        # pages[0].save('result.pdf', 'PDF', resolution=300, save_all=True, append_images=pages[1:])
+        image_files = self.get_image_filenames()
+        images = [Image.open(filename) for filename in image_files]
+        page_images = self.images_to_pages(images)
+        result_filename = f'{self.filename}.pdf'
+        print(f'Saving output pdf to {result_filename}...')
+        page_images[0].save(result_filename, 'PDF', resolution=100, save_all=True, append_images=page_images[1:])
 
     # clean up the working directory afterward: delete the video and the extracted images
     def cleanup(self, preserve_video = False, preserve_imgs = False):
@@ -280,8 +313,8 @@ def main():
     # after cropping, remove all but one image of each row of sheet music
     grabber.remove_dupe_frames()
 
-    # export all the remaining sheet music images into one output image
-    grabber.output_result_image()
+    # export all the remaining sheet music images into one output pdf
+    grabber.output_result_pdf()
 
     # cleanup: delete video and images, unless otherwise specified in the options
     # assume --skip-download implies --preserve-video
