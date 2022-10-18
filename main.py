@@ -264,17 +264,6 @@ class SheetGrabber:
                 current_page_height = 0
             current_page.paste(im=image, box=(0, current_page_height))
             current_page_height += image.height
-        # for idx, image in enumerate(images):
-        #     if idx == 0 or current_page in page_images:
-        #         # if it's the first iteration OR we've already added this page to page_images,
-        #         # then reset the variables for the current page
-        #         current_page = Image.new('RGB', (width, page_height), color='white')
-        #         current_page_height = 0
-        #     if current_page_height + image.height > page_height:
-        #         page_images.append(current_page)
-        #     else:
-        #         current_page.paste(im=image, box=(0, current_page_height))
-        #         current_page_height += image.height
         # add the last page, if it wasn't already added
         if current_page not in page_images:
             page_images.append(current_page)
@@ -360,7 +349,7 @@ def main():
     # after cropping, remove all but one image of each row of sheet music
     grabber.remove_dupe_frames()
 
-    # export all the remaining sheet music images into a pdf (or jpg, specified by --output)
+    # export all the remaining sheet music images into a pdf (and/or jpg, specified by --output)
     if args.output in ['pdf', 'both']:
         grabber.output_result_pdf()
     if args.output in ['jpg', 'both']:
