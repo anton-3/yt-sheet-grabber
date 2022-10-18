@@ -148,7 +148,7 @@ class SheetGrabber:
     # returns two values, the indices of those two rows respectively
     def guess_crop_bounds(self, image_path = None):
         if not image_path:
-            image_path = get_image_filenames()[0]
+            image_path = self.get_image_filenames()[0]
         image = cv2.imread(image_path)
         top_bound = self.first_white_row(image)
         # if top_bound is None, just exit bc couldn't guess the bounds
