@@ -133,7 +133,7 @@ class SheetGrabber:
     # image is an image object read with cv2
     # top and bottom pixel are the top and bottom pixel rows to crop down to
     # top of an image is 0 and the bottom (assuming 1920x1080) is 1080
-    def crop_image(self, image_path, top_pixel, bottom_pixel):
+    def _crop_image(self, image_path, top_pixel, bottom_pixel):
         image = cv2.imread(image_path)
         cropped_image = image[top_pixel:bottom_pixel]
         cv2.imwrite(image_path, cropped_image)
@@ -145,19 +145,19 @@ class SheetGrabber:
     # returns two values, the indices of those two rows respectively
     def guess_crop_bounds(self, image_path = None):
         if not image_path:
-            image_path = self.get_image_filenames()[0]
+            image_path = self._get_image_filenames()[0]
         image = cv2.imread(image_path)
-        top_bound = self.first_white_row(image)
+        top_bound = self._first_white_row(image)
         # if top_bound is None, just exit bc couldn't guess the bounds
         if not top_bound:
             return None, None
         # for bottom bound, do same as top except with image flipped vertically
-        bottom_bound = len(image) - self.first_white_row(image[::-1])
+        bottom_bound = len(image) - self._first_white_row(image[::-1])
         return top_bound, bottom_bound
 
     # returns index of first row in a cv2 image that's 100% white pixels
     # TODO: rework this to work when it's "close enough" to 100% white
-    def first_white_row(self, image):
+    def _first_white_row(self, image):
         white_row_idx = None
         # what a white pixel looks like to cv2
         white = np.array([255, 255, 255], dtype='uint8')
@@ -177,7 +177,7 @@ class SheetGrabber:
         return white_row_idx
 
     # returns a sorted list of the .jpg filenames in the extracted frames directory
-    def get_image_filenames(self):
+    def _get_image_filenames(self):
         image_files = glob(os.path.join(self.filename, '*.jpg'))
         # sort filenames in the chronological order of the frames
         image_files.sort(key=lambda f: int(os.path.splitext(os.path.basename(f))[0]))
@@ -189,7 +189,7 @@ class SheetGrabber:
         if top < 0 or bottom < 0 or bottom <= top:
             raise ValueError('Invalid input for cropping range')
         # list of all images to crop
-        image_files = self.get_image_filenames()
+        image_files = self._get_image_filenames()
         # if top or bottom are greater than the height of the images, limit them
         height = len(cv2.imread(image_files[0]))
         top = height - 1 if top >= height else top
@@ -197,7 +197,7 @@ class SheetGrabber:
         print(f'Cropping screenshots to {top}px-{bottom}px...')
         for idx, image_file in enumerate(image_files):
             print(f'{round((idx+1) / len(image_files) * 10000) / 100}%', end='\r')
-            self.crop_image(image_file, top, bottom)
+            self._crop_image(image_file, top, bottom)
         print()
 
     # removes the duplicate sheet music frames from the images directory
@@ -205,7 +205,7 @@ class SheetGrabber:
     # the ones that are similar
     def remove_dupe_frames(self):
         print('Filtering cropped image files...')
-        image_files = self.get_image_filenames()
+        image_files = self._get_image_filenames()
         imagehashes = {}
         # calculate the perceptual hash of each image
         for filename in image_files:
@@ -226,7 +226,7 @@ class SheetGrabber:
 
     # stitch all the sheet music images together vertically into one (very long) image
     def output_result_image(self):
-        image_files = self.get_image_filenames()
+        image_files = self._get_image_filenames()
         images = [Image.open(filename) for filename in image_files]
         result_width, _ = images[0].size
         # sum of all the heights of each individual image
@@ -243,7 +243,7 @@ class SheetGrabber:
 
     # takes a list of PIL images and returns a shorter list of them stitched together vertically
     # stitches them together until they're close to but less than the dimensions of A4 paper
-    def images_to_pages(self, images):
+    def _images_to_pages(self, images):
         page_ratio = 842 / 595 # ratio of height to width of A4 paper (roughly sqrt of 2)
         width = images[0].width # width is same for every image
         # height to make each page in pixels, equal to width times the A4 ratio
@@ -268,7 +268,7 @@ class SheetGrabber:
 
     # takes a filename of a pdf and resize its pages to the normal size for A4 paper
     # since by default with a 1920x1080 video, pdf is 1920 pixels wide which is massive
-    def convert_pdf_to_a4(self, filename):
+    def _convert_pdf_to_a4(self, filename):
         input_pdf = fitz.open(filename)
         result_pdf = fitz.open()
         for page in input_pdf:
@@ -281,13 +281,13 @@ class SheetGrabber:
 
     # stitch all the sheet music images together vertically into a pdf
     def output_result_pdf(self):
-        image_files = self.get_image_filenames()
+        image_files = self._get_image_filenames()
         images = [Image.open(filename) for filename in image_files]
-        page_images = self.images_to_pages(images)
+        page_images = self._images_to_pages(images)
         result_filename = f'{self.filename}.pdf'
         print(f'Saving output pdf to {result_filename}...')
         page_images[0].save(result_filename, 'PDF', resolution=100, save_all=True, append_images=page_images[1:])
-        self.convert_pdf_to_a4(result_filename)
+        self._convert_pdf_to_a4(result_filename)
 
     # clean up the working directory afterward: delete the video and the extracted images
     def cleanup(self, preserve_video = False, preserve_imgs = False):
