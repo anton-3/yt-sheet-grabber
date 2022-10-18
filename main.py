@@ -248,21 +248,33 @@ class SheetGrabber:
     # stitches them together until they're close to but less than the dimensions of A4 paper
     def images_to_pages(self, images):
         page_ratio = 842 / 595 # ratio of height to width of A4 paper (roughly sqrt of 2)
-        width = images[0].width
-        # height to make each page in pixels, relative to image width
+        width = images[0].width # width is same for every image
+        # height to make each page in pixels, equal to width times the A4 ratio
         page_height = int(page_ratio * width)
         page_images = []
-        for idx, image in enumerate(images):
-            if idx == 0 or current_page in page_images:
-                # if it's the first iteration OR we've already added this page to page_images,
-                # then reset the variables for the current page
+        current_page = Image.new('RGB', (width, page_height), color='white')
+        current_page_height = 0
+        for image in images:
+            if current_page_height + image.height > page_height:
+                # if there isn't enough space to add image to this page,
+                # then append current page to page_images
+                page_images.append(current_page)
+                # and reset the variables to create the next page
                 current_page = Image.new('RGB', (width, page_height), color='white')
                 current_page_height = 0
-            if current_page_height + image.height > page_height:
-                page_images.append(current_page)
-            else:
-                current_page.paste(im=image, box=(0, current_page_height))
-                current_page_height += image.height
+            current_page.paste(im=image, box=(0, current_page_height))
+            current_page_height += image.height
+        # for idx, image in enumerate(images):
+        #     if idx == 0 or current_page in page_images:
+        #         # if it's the first iteration OR we've already added this page to page_images,
+        #         # then reset the variables for the current page
+        #         current_page = Image.new('RGB', (width, page_height), color='white')
+        #         current_page_height = 0
+        #     if current_page_height + image.height > page_height:
+        #         page_images.append(current_page)
+        #     else:
+        #         current_page.paste(im=image, box=(0, current_page_height))
+        #         current_page_height += image.height
         # add the last page, if it wasn't already added
         if current_page not in page_images:
             page_images.append(current_page)
@@ -283,7 +295,6 @@ class SheetGrabber:
 
     # stitch all the sheet music images together vertically into a pdf
     def output_result_pdf(self):
-        # pages[0].save('result.pdf', 'PDF', resolution=300, save_all=True, append_images=pages[1:])
         image_files = self.get_image_filenames()
         images = [Image.open(filename) for filename in image_files]
         page_images = self.images_to_pages(images)
