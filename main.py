@@ -125,7 +125,7 @@ class SheetGrabber:
                 print('\nRan out of frames to read, which might happen when the video is trimmed', end='')
                 break
 
-            image_filepath = f'{self.filename}/{frame}.jpg'
+            image_filepath = os.path.join(self.filename, f'{frame}.jpg')
             # write the image to image_filepath
             cv2.imwrite(image_filepath, image)
             image_count += 1
@@ -148,7 +148,7 @@ class SheetGrabber:
     # returns two values, the indices of those two rows respectively
     def guess_crop_bounds(self, image_path = None):
         if not image_path:
-            image_path = glob(f'{self.filename}/*.jpg')[0]
+            image_path = get_image_filenames()[0]
         image = cv2.imread(image_path)
         top_bound = self.first_white_row(image)
         # if top_bound is None, just exit bc couldn't guess the bounds
@@ -181,7 +181,7 @@ class SheetGrabber:
 
     # returns a sorted list of the .jpg filenames in the extracted frames directory
     def get_image_filenames(self):
-        image_files = glob(f'{self.filename}/*.jpg')
+        image_files = glob(os.path.join(self.filename, '*.jpg'))
         # sort filenames in the chronological order of the frames
         image_files.sort(key=lambda f: int(os.path.splitext(os.path.basename(f))[0]))
         return image_files
